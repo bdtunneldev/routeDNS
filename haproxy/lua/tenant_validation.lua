@@ -183,20 +183,21 @@ local function get_valkey_connection()
         return valkey_pool.conn
     end
     
-    -- Create new TCP connection to Valkey
+    -- Create new TCP connection to Valkey using core.tcp()
+    -- core.tcp() is the correct HAProxy Lua API for TCP connections
     local conn = core.tcp()
     if not conn then
         core.log(core.err, "[tenant-valkey] Failed to create TCP socket")
         return nil
     end
     
-    -- Set timeout (in milliseconds for core.tcp)
-    conn:settimeout(CONFIG.valkey_timeout)
+    -- Set timeout (in seconds for HAProxy tcp socket)
+    conn:settimeout(CONFIG.valkey_timeout / 1000)
     
     -- Connect to Valkey
-    local ok = conn:connect(CONFIG.valkey_host, CONFIG.valkey_port)
+    local ok, err = conn:connect(CONFIG.valkey_host, CONFIG.valkey_port)
     if not ok then
-        core.log(core.warning, "[tenant-valkey] Connection failed to " .. CONFIG.valkey_host .. ":" .. CONFIG.valkey_port)
+        core.log(core.warning, "[tenant-valkey] Connection failed to " .. CONFIG.valkey_host .. ":" .. CONFIG.valkey_port .. " - " .. tostring(err))
         return nil
     end
     

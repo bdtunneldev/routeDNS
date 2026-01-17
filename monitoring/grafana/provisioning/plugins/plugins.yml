@@ -1,0 +1,4 @@
+# Grafana plugins provisioning
+# Add plugin configurations here if needed
+apiVersion: 1
+apps: []

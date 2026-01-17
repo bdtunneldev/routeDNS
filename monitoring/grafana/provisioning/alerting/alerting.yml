@@ -1,0 +1,4 @@
+# Grafana alerting provisioning
+# Add alert rules, contact points, and notification policies here if needed
+apiVersion: 1
+groups: []

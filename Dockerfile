@@ -17,14 +17,16 @@ RUN mkdir -p /usr/local/etc/haproxy/certs \
     && mkdir -p /usr/local/etc/haproxy/lua \
     && mkdir -p /var/run/haproxy
 
-# Set proper permissions
-RUN chown -R haproxy:haproxy /var/run/haproxy
+# Set proper permissions for all haproxy directories
+RUN chown -R haproxy:haproxy /usr/local/etc/haproxy \
+    && chown -R haproxy:haproxy /var/run/haproxy \
+    && chmod 755 /usr/local/etc/haproxy/certs \
+    && chmod 755 /usr/local/etc/haproxy/lua
 
 # Copy configuration (done via volumes in docker-compose, but set defaults)
-COPY haproxy/haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
+COPY --chown=haproxy:haproxy haproxy/haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
 
-# Switch back to haproxy user
-USER haproxy
+# Note: Container runs as root to read mounted certs, but HAProxy can drop privileges if configured
 
 # Expose ports
 EXPOSE 853 8404
