@@ -1,0 +1,320 @@
+services:
+  haproxy:
+    image: haproxy:3.3.1
+    container_name: haproxy
+    restart: unless-stopped
+    networks:
+      - internal_net
+      - monitoring_net  # Added for Prometheus scraping
+    depends_on:
+      valkey:
+        condition: service_healthy
+      routedns:
+        condition: service_healthy
+
+    environment:
+      - HAPROXY_STATS_USER=${HAPROXY_STATS_USER}
+      - HAPROXY_STATS_PASSWORD=${HAPROXY_STATS_PASSWORD}
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD}
+      - VALKEY_HOST=valkey
+
+    volumes:
+      - type: bind
+        source: ./haproxy/haproxy.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
+        read_only: true
+      - type: bind
+        source: ./haproxy/certs
+        target: /usr/local/etc/haproxy/certs
+        read_only: true
+      - type: bind
+        source: ./haproxy/lua
+        target: /usr/local/etc/haproxy/lua
+        read_only: true
+      - type: volume
+        source: haproxy_socket
+        target: /var/run/haproxy
+      - type: bind
+        source: ./haproxy/docker-entrypoint.sh
+        target: /usr/local/bin/docker-entrypoint.sh
+        read_only: true
+
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'quit' | nc -w 1 127.0.0.1 8404 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    ports:
+      - "853:853"           # DoT - public
+      - "127.0.0.1:8404:8404"  # Stats - localhost only
+
+  routedns:
+    image: folbricht/routedns:v0.1.129
+    container_name: routedns
+    restart: unless-stopped
+    networks:
+      - internal_net
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    read_only: true
+
+    volumes:
+      - type: bind
+        source: ./routedns/config.toml
+        target: /etc/routedns/config.toml
+        read_only: true
+
+    command: ["--config", "/etc/routedns/config.toml"]
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+
+    expose:
+      - "5301"
+
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 5301 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9.0.1
+    container_name: valkey
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M,mode=1777
+
+    command: >
+      valkey-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${VALKEY_PASSWORD:?VALKEY_PASSWORD must be set in .env}
+
+    volumes:
+      - valkey_data:/data
+
+    networks:
+      - internal_net
+
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$VALKEY_PASSWORD valkey-cli ping | grep -q PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # MONITORING STACK
+  # =============================================================================
+
+  prometheus:
+    image: prom/prometheus:v3.9.1
+    container_name: prometheus
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    user: "nobody"
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+    volumes:
+      - type: bind
+        source: ./monitoring/prometheus/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+      - type: bind
+        source: ./monitoring/prometheus/alerts.yml
+        target: /etc/prometheus/alerts.yml
+        read_only: true
+      - prometheus_data:/prometheus
+
+    networks:
+      - monitoring_net
+
+    ports:
+      - "127.0.0.1:9090:9090"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  grafana:
+    image: grafana/grafana:12.4.0
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=warn
+
+    volumes:
+      - type: bind
+        source: ./monitoring/grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+      - type: bind
+        source: ./monitoring/grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
+      - grafana_data:/var/lib/grafana
+
+    networks:
+      - monitoring_net
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  haproxy_socket:
+  valkey_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  internal_net:
+    driver: bridge
+  monitoring_net:
+    driver: bridge

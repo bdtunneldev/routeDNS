@@ -1,0 +1,156 @@
+########################################
+# HAPROXY + RouteDNS + Lua + Valkey  – FULL MULTI-PROTOCOL SETUP For DoT Entrypint #
+# UDP / TCP 5301
+# ALL LISTENERS = LOCALHOST ONLY
+########################################
+
+########################
+# Bootstrap Resolver
+########################
+[bootstrap-resolver]
+address  = "1.1.1.1:853"
+protocol = "dot"
+
+########################
+# Resolvers – Bangladesh
+########################
+[resolvers.bangladesh-udp-1]
+address  = "103.187.22.195:53"
+protocol = "udp"
+
+[resolvers.bangladesh-tcp-1]
+address  = "103.187.22.195:53"
+protocol = "tcp"
+
+
+[resolvers.bangladesh-udp-2]
+address  = "103.159.37.151:53"
+protocol = "udp"
+
+[resolvers.bangladesh-tcp-2]
+address  = "103.159.37.151:53"
+protocol = "tcp"
+
+
+[resolvers.bangladesh-udp-3]
+address  = "103.218.137.85:53"
+protocol = "udp"
+
+[resolvers.bangladesh-tcp-3]
+address  = "103.218.137.85:53"
+protocol = "tcp"
+
+
+[resolvers.bangladesh-udp-4]
+address  = "103.218.137.94:53"
+protocol = "udp"
+
+[resolvers.bangladesh-tcp-4]
+address  = "103.218.137.94:53"
+protocol = "tcp"
+
+
+[resolvers.bangladesh-udp-5]
+address  = "103.218.137.95:53"
+protocol = "udp"
+
+[resolvers.bangladesh-tcp-5]
+address  = "103.218.137.95:53"
+protocol = "tcp"
+
+########################
+# Resolvers – Cloudflare
+########################
+[resolvers.cloudflare-udp]
+address = "1.1.1.1:53"
+protocol = "udp"
+
+[resolvers.cloudflare-tcp]
+address = "1.1.1.1:53"
+protocol = "tcp"
+
+[resolvers.cloudflare-dot]
+address = "1.1.1.1:853"
+protocol = "dot"
+
+[resolvers.cloudflare-doh-post]
+address = "https://1.1.1.1/dns-query"
+protocol = "doh"
+
+[resolvers.cloudflare-doh-get]
+address = "https://cloudflare-dns.com/dns-query{?dns}"
+protocol = "doh"
+doh = { method = "GET" }
+bootstrap-address = "1.1.1.1"
+
+[resolvers.cloudflare-doh-quic]
+address = "https://cloudflare-dns.com/dns-query{?dns}"
+protocol = "doh"
+transport = "quic"
+enable-0rtt = true
+bootstrap-address = "1.1.1.1"
+
+########################
+# Resolvers – Google
+########################
+[resolvers.google-dot]
+address = "8.8.8.8:853"
+protocol = "dot"
+
+########################
+# Groups – Bangladesh Load Balancing
+########################
+[groups.bd-udp-lb]
+type = "fastest"
+resolvers = ["bangladesh-udp-1", "bangladesh-udp-2", "bangladesh-udp-3", "bangladesh-udp-4", "bangladesh-udp-5"]
+
+[groups.bd-tcp-lb]
+type = "fastest"
+resolvers = ["bangladesh-tcp-1", "bangladesh-tcp-2", "bangladesh-tcp-3", "bangladesh-tcp-4", "bangladesh-tcp-5"]
+
+
+
+########################
+# Routers
+########################
+[routers.main]
+routes = [
+  { name = "(?i)(^|\\.)connectivitycheck\\.gstatic\\.com\\.$", resolver = "cloudflare-dot" },
+
+  { name = "(?i)(^|\\.)(cmsimages\\.capp\\.bka\\.sh|images\\.capp\\.bka\\.sh|eventapi\\.capp\\.bka\\.sh|api\\.cde\\.capp\\.bka\\.sh|bka\\.sh|mynagad\\.com|app\\.mynagad\\.com|api\\.upaysystem\\.com|upaysystem\\.com|avcs\\.upaysystem\\.com|bkash\\.com|nagad\\.com\\.bd|storage1\\.alaap\\.gov\\.bd|billing\\.alaap\\.gov\\.bd|rocket-consumertxnservice\\.dutchbanglabank\\.com|dutchbanglabank\\.com|ip-api\\.com|brilliant\\.com\\.bd)\\.$", resolver = "bd-udp-lb" },
+
+  { name = "(?i)(^|\\.)(cmsimages\\.capp\\.bka\\.sh|images\\.capp\\.bka\\.sh|eventapi\\.capp\\.bka\\.sh|api\\.cde\\.capp\\.bka\\.sh|bka\\.sh|mynagad\\.com|app\\.mynagad\\.com|api\\.upaysystem\\.com|upaysystem\\.com|avcs\\.upaysystem\\.com|bkash\\.com|nagad\\.com\\.bd|storage1\\.alaap\\.gov\\.bd|billing\\.alaap\\.gov\\.bd|rocket-consumertxnservice\\.dutchbanglabank\\.com|dutchbanglabank\\.com|ip-api\\.com|brilliant\\.com\\.bd)\\.$", resolver = "bd-tcp-lb" },
+  { source = "192.168.1.100/32", resolver = "cloudflare-dot" },
+  { type = "MX", resolver = "google-dot" },
+  { type = "TXT", resolver = "google-dot" },
+
+  { resolver = "cloudflare-dot" }
+]
+
+[routers.security]
+routes = [{ resolver = "cloudflare-dot" }]
+
+########################
+# LISTENERS – ALL LOCAL
+########################
+#[listeners.dns-udp]
+#address  = "0.0.0.0:53"
+#protocol = "udp"
+#resolver = "security"
+
+#[listeners.dns-tcp]
+#address  = "0.0.0.0:53"
+#protocol = "tcp"
+#resolver = "security"
+
+[listeners.local-udp]
+address = "0.0.0.0:5301"
+protocol = "udp"
+resolver = "main"
+allowed-net = ["127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
+
+[listeners.local-tcp]
+address = "0.0.0.0:5301"
+protocol = "tcp"
+resolver = "main"
+allowed-net = ["127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]

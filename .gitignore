@@ -1,0 +1,45 @@
+# =============================================================================
+# RouteDNS Production .gitignore
+# =============================================================================
+
+# Environment files (NEVER commit secrets)
+.env
+.env.*
+!.env.example
+
+# SSL/TLS certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+haproxy/certs/*.pem
+haproxy/certs/*.key
+
+# Backups
+backups/
+*.rdb
+*.aof
+
+# Docker volumes (if mounted locally)
+data/
+volumes/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+tmp/

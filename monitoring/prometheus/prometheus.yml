@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Load alerting rules
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # HAProxy native Prometheus metrics endpoint
+  - job_name: 'haproxy'
+    static_configs:
+      - targets: ['haproxy:8404']
+    metrics_path: /metrics
+    # No auth required for /metrics endpoint (configured in haproxy.cfg)
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
