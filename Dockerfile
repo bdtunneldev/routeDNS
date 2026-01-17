@@ -5,12 +5,13 @@ FROM haproxy:3.3.1-alpine
 USER root
 
 # Install required packages for Lua HTTP client and utilities
+# hadolint ignore=DL3018
 RUN apk update && apk add --no-cache \
-    lua5.4 \
-    lua5.4-socket \
-    ca-certificates \
-    curl \
-    netcat-openbsd
+    lua5.4=~5.4 \
+    lua5.4-socket=~3.1 \
+    ca-certificates=~20241010 \
+    curl=~8.12 \
+    netcat-openbsd=~1.226
 
 # Create necessary directories
 RUN mkdir -p /usr/local/etc/haproxy/certs \
@@ -25,6 +26,9 @@ RUN chown -R haproxy:haproxy /usr/local/etc/haproxy \
 
 # Copy configuration (done via volumes in docker-compose, but set defaults)
 COPY --chown=haproxy:haproxy haproxy/haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
+
+# Switch to non-root user for security
+USER haproxy
 
 # Note: Container runs as root to read mounted certs, but HAProxy can drop privileges if configured
 
