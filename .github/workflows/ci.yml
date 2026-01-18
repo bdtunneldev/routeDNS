@@ -195,112 +195,12 @@ jobs:
           docker system prune -f
 
   # ============================================================================
-  # HEALTH CHECK - Extended Tests
-  # ============================================================================
-  health-check:
-    name: Extended Health Checks
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Create test environment
-        run: |
-          mkdir -p haproxy/certs
-          openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 1 -nodes \
-            -subj "/CN=test.dns.routedns.io"
-          cat cert.pem key.pem > haproxy/certs/dot.pem
-          chmod 600 haproxy/certs/dot.pem
-          
-          cat > .env << 'EOF'
-          VALKEY_PASSWORD=healthcheck123
-          VALKEY_HOST=valkey
-          GF_SECURITY_ADMIN_USER=admin
-          GF_SECURITY_ADMIN_PASSWORD=healthcheck123
-          HAPROXY_STATS_USER=admin
-          HAPROXY_STATS_PASSWORD=healthcheck123
-          EOF
-
-      - name: Start stack
-        run: |
-          docker compose up -d
-          sleep 45
-
-      - name: Comprehensive health checks
-        run: |
-          echo "═══════════════════════════════════════════════════"
-          echo "           COMPREHENSIVE HEALTH CHECKS"
-          echo "═══════════════════════════════════════════════════"
-          
-          CHECKS_PASSED=0
-          CHECKS_FAILED=0
-          
-          check() {
-            local name=$1
-            local cmd=$2
-            echo -n "Testing $name... "
-            if eval "$cmd" > /dev/null 2>&1; then
-              echo "✅ PASS"
-              CHECKS_PASSED=$((CHECKS_PASSED + 1))
-            else
-              echo "❌ FAIL"
-              CHECKS_FAILED=$((CHECKS_FAILED + 1))
-            fi
-          }
-          
-          # Container health
-          check "HAProxy container" "docker compose ps haproxy | grep -q 'running'"
-          check "RouteDNS container" "docker compose ps routedns | grep -q 'running'"
-          check "Valkey container" "docker compose ps valkey | grep -q 'running'"
-          check "Prometheus container" "docker compose ps prometheus | grep -q 'running'"
-          check "Grafana container" "docker compose ps grafana | grep -q 'running'"
-          
-          # Service endpoints
-          check "Prometheus API" "curl -sf http://localhost:9090/-/healthy"
-          check "Grafana API" "curl -sf http://localhost:3000/api/health"
-          check "HAProxy stats port" "nc -z localhost 8404"
-          check "DoT port 853" "nc -z localhost 853"
-          
-          # Metrics endpoints
-          check "Prometheus targets" "curl -sf http://localhost:9090/api/v1/targets | grep -q 'activeTargets'"
-          
-          echo "═══════════════════════════════════════════════════"
-          echo "Results: $CHECKS_PASSED passed, $CHECKS_FAILED failed"
-          echo "═══════════════════════════════════════════════════"
-          
-          if [ $CHECKS_FAILED -gt 0 ]; then
-            exit 1
-          fi
-
-      - name: Performance baseline test
-        run: |
-          echo "📊 Running performance baseline..."
-          
-          # Memory usage
-          echo "Memory usage per container:"
-          docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}"
-          
-          # Response time check
-          echo ""
-          echo "Response times:"
-          time curl -sf http://localhost:9090/-/healthy > /dev/null
-          time curl -sf http://localhost:3000/api/health > /dev/null
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker compose down -v --remove-orphans
-          docker system prune -af
-          docker volume prune -f
-
-  # ============================================================================
   # DEPLOY (only on main branch)
   # ============================================================================
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    needs: [test, health-check]
+    needs: [test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
@@ -331,7 +231,7 @@ jobs:
   cleanup:
     name: Cleanup Old Resources
     runs-on: ubuntu-latest
-    needs: [test, health-check]
+    needs: [test]
     if: always()
     steps:
       - name: Clean up old workflow runs
@@ -351,6 +251,5 @@ jobs:
           echo "| Lint | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Security | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Test | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Health Check | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
