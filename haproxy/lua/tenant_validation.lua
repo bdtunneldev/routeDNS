@@ -271,6 +271,7 @@ local function valkey_command(...)
     
     local conn = get_valkey_connection()
     if not conn then
+        core.log(core.debug, "[tenant-valkey] No connection available for command")
         return nil, "connection_failed"
     end
     
@@ -288,7 +289,7 @@ local function valkey_command(...)
     
     local response, err = valkey_send_raw(conn, command)
     if err then
-        core.log(core.warning, "[tenant-valkey] Command failed: " .. tostring(err))
+        core.log(core.debug, "[tenant-valkey] Command failed: " .. tostring(err))
         close_valkey_connection()
         return nil, err
     end
