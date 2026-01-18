@@ -37,8 +37,22 @@ local CONFIG = {
     block_duration = 1800,         -- 30 minutes block for violators
     -- Valkey configuration - using Docker service name
     valkey_host = os.getenv("VALKEY_HOST") or "valkey",
-    valkey_port = tonumber(os.getenv("VALKEY_PORT")) or 6379,
-    valkey_timeout = tonumber(os.getenv("VALKEY_TIMEOUT_MS")) or 1000,  -- milliseconds
+    valkey_port = (function()
+        local port_str = os.getenv("VALKEY_PORT")
+        if port_str and port_str ~= "" then
+            return tonumber(port_str) or 6379
+        else
+            return 6379
+        end
+    end)(),
+    valkey_timeout = (function()
+        local timeout_str = os.getenv("VALKEY_TIMEOUT_MS")
+        if timeout_str and timeout_str ~= "" then
+            return tonumber(timeout_str) or 1000
+        else
+            return 1000
+        end
+    end)(),  -- milliseconds
     valkey_db = 0,
     valkey_password = os.getenv("VALKEY_PASSWORD"),
 }
@@ -85,28 +99,28 @@ local function parse_resp(response)
     
     local first_char = response:sub(1, 1)
     
-    if first_char == "+" then
+    if (first_char == "+") then
         local nl_pos = response:find("\r\n")
         if nl_pos then
             return response:sub(2, nl_pos - 1), nil
         end
         return response:sub(2), nil
         
-    elseif first_char == "-" then
+    elseif (first_char == "-") then
         local nl_pos = response:find("\r\n")
         if nl_pos then
             return nil, response:sub(2, nl_pos - 1)
         end
         return nil, response:sub(2)
         
-    elseif first_char == ":" then
+    elseif (first_char == ":") then
         local nl_pos = response:find("\r\n")
         if nl_pos then
             return tonumber(response:sub(2, nl_pos - 1)), nil
         end
         return tonumber(response:sub(2)), nil
         
-    elseif first_char == "$" then
+    elseif (first_char == "$") then
         local len_end = response:find("\r\n")
         if not len_end then
             return nil, "invalid_resp"
@@ -130,7 +144,7 @@ local function parse_resp(response)
         
         return response:sub(data_start, data_end), nil
         
-    elseif first_char == "*" then
+    elseif (first_char == "*") then
         local len_end = response:find("\r\n")
         if not len_end then
             return nil, "invalid_resp"
