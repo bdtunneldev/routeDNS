@@ -1,5 +1,5 @@
 # HAProxy with Lua support for tenant validation
-FROM haproxy:3.3.1-alpine
+FROM haproxy:3.3.2-alpine
 
 # Switch to root for package installation
 USER root
